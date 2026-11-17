@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: library
+  datasource:
+    url: jdbc:mysql://localhost:3306/coding
+    username: root
+    password: ROOT
+    driverClassName: com.mysql.cj.jdbc.Driver
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+  mail:
+    host: in-v3.mailjet.com
+    port: 587
+    username: 8739ddce8d21877f022c8b848c9e7961
+    password: 6f6420d1f9b29108894f50ca5a5799ed
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+mail:
+  from: dsztacheta@gmail.com
