@@ -1,10 +1,11 @@
+
 package com.example.library.services;
 
-import com.example.library.model.Book;
-import com.example.library.model.BookDTO;
-import com.example.library.model.Client;
+import com.example.library.model.*;
 import com.example.library.repository.BookRepository;
 import com.example.library.repository.ClientRepository;
+import com.example.library.repository.NotificationRepository;
+import com.example.library.repository.SubscriptionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,11 +31,17 @@ public class BookServiceTest {
     @Mock
     private MailService mailService;
 
+    @Mock
+    private SubscriptionRepository subscriptionRepository;
+
+    @Mock
+    private NotificationRepository notificationRepository;
+
     @InjectMocks
     private BookService bookService;
 
     @Test
-    public void testAddBookHappyPath(){
+    public void testAddBookHappyPath() {
         Book savedBook = Book.builder()
                 .id(1L)
                 .author("Stephen King")
@@ -49,7 +56,10 @@ public class BookServiceTest {
                 .build();
 
         when(bookRepository.save(any(Book.class))).thenReturn(savedBook);
-        when(clientRepository.findAll()).thenReturn(List.of());
+
+        when(subscriptionRepository.findMatchingSubscriptions(
+                "Stephen King", "Fantasy"
+        )).thenReturn(List.of());
 
         BookDTO result = bookService.addBook(bookDTO);
 
@@ -59,24 +69,26 @@ public class BookServiceTest {
         assertEquals("Fantasy", result.getCategory());
 
         verify(bookRepository).save(any(Book.class));
-        verify(clientRepository).findAll();
+
+        verify(subscriptionRepository).findMatchingSubscriptions(
+                "Stephen King", "Fantasy"
+        );
+
+        verifyNoInteractions(notificationRepository);
         verifyNoInteractions(mailService);
+        verifyNoInteractions(clientRepository);
     }
 
     @Test
-    public void testAddBookResultsInSendingNotification(){
+    public void testAddBookResultsInSendingNotification() {
         Client client = mock(Client.class);
-        var subscription = mock(com.example.library.model.Subscription.class);
+        Subscription subscription = mock(Subscription.class);
+
         BookDTO bookDTO = BookDTO.builder()
                 .author("Stephen King")
                 .title("Mroczna Wieża")
                 .category("Fantasy")
                 .build();
-
-        when(client.getSubscription()).thenReturn(subscription);
-        when(client.getEmail()).thenReturn("test@gmail.com");
-        when(subscription.getSubscribedAuthors())
-                .thenReturn(List.of("Stephen King"));
 
         Book savedBook = Book.builder()
                 .id(1L)
@@ -85,14 +97,31 @@ public class BookServiceTest {
                 .category("Fantasy")
                 .build();
 
+        when(client.getId()).thenReturn(1L);
+        when(subscription.getClient()).thenReturn(client);
+
         when(bookRepository.save(any(Book.class))).thenReturn(savedBook);
-        when(clientRepository.findAll()).thenReturn(List.of(client));
+
+        when(subscriptionRepository.findMatchingSubscriptions(
+                "Stephen King", "Fantasy"
+        )).thenReturn(List.of(subscription));
+
+        when(notificationRepository.existsByClientIdAndBookId(1L, 1L))
+                .thenReturn(false);
 
         bookService.addBook(bookDTO);
 
-        verify(mailService).sendConfirmation(
-                eq("test@gmail.com"),
-                contains("Mroczna Wieża")
+        verify(bookRepository).save(any(Book.class));
+
+        verify(subscriptionRepository).findMatchingSubscriptions(
+                "Stephen King", "Fantasy"
         );
+
+        verify(notificationRepository).existsByClientIdAndBookId(1L, 1L);
+
+        verify(notificationRepository).save(any(Notification.class));
+
+        verifyNoInteractions(mailService);
+        verifyNoInteractions(clientRepository);
     }
 }

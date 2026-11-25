@@ -1,18 +1,21 @@
 package com.example.library.services;
 
+import com.example.library.exceptions.UserAlreadySubscibedException;
+import com.example.library.exceptions.UserNotActivatedException;
+import com.example.library.exceptions.UserNotAuthenticatedException;
+import com.example.library.exceptions.UserNotFoundException;
 import com.example.library.model.Client;
 import com.example.library.model.ClientDTO;
 import com.example.library.model.Subscription;
 import com.example.library.model.SubscriptionDTO;
 import com.example.library.repository.ClientRepository;
+import com.example.library.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +23,7 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
+    private final SubscriptionRepository subscriptionRepository;
 
     public ClientDTO register(ClientDTO clientDTO) {
 
@@ -27,20 +31,16 @@ public class ClientService {
             throw new RuntimeException("User with this email already exists");
         }
 
-        Subscription subscription = Subscription.builder()
-                .subscribedAuthors(new ArrayList<>())
-                .subscribedCategories(new ArrayList<>())
-                .build();
         Client client = Client.builder()
                 .name(clientDTO.getName())
                 .surname(clientDTO.getSurname())
                 .email(clientDTO.getEmail())
-                .subscription(subscription)
+                .activated(false)
                 .password(passwordEncoder.encode(clientDTO.getPassword()))
                 .build();
 
         Client savedClient = clientRepository.save(client);
-mailService.sendConfirmation(client.getEmail(), "Konto zalozone pomyslnie!");
+        mailService.sendConfirmation(client.getEmail(), "Potwierdz adres email: http://localhost:8080/user/activate/" + savedClient.getId());
 
         return ClientDTO.builder()
                 .name(savedClient.getName())
@@ -49,6 +49,16 @@ mailService.sendConfirmation(client.getEmail(), "Konto zalozone pomyslnie!");
                 .build();
     }
 
+    public void activateClient(Long userId) {
+        Client client = clientRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("Client not found"));
+
+        client.setActivated(true);
+
+        clientRepository.save(client);
+    }
+
+    @Transactional
     public void addSubscription(SubscriptionDTO dto) {
 
         var authentication =
@@ -57,48 +67,93 @@ mailService.sendConfirmation(client.getEmail(), "Konto zalozone pomyslnie!");
         if (authentication == null ||
                 !authentication.isAuthenticated() ||
                 "anonymousUser".equals(authentication.getName())) {
-            throw new RuntimeException("User is not authenticated");
+            throw new UserNotAuthenticatedException("User is not authenticated");
         }
 
         String email = authentication.getName();
 
         Client client = clientRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new UserNotFoundException(
                         "Authenticated user not found: " + email));
 
-        if (dto.getAuthor() != null) {
-            client.getSubscription().getSubscribedAuthors().add(dto.getAuthor());
+        isActivated(client);
+
+        String author = dto.getAuthor();
+        String category = dto.getCategory();
+
+        if ((author == null || author.isBlank()) &&
+                (category == null || category.isBlank())) {
+            throw new IllegalArgumentException(
+                    "Author or category must be provided");
         }
 
-        if (dto.getCategory() != null) {
-            client.getSubscription().getSubscribedCategories().add(dto.getCategory());
+        if (author != null && !author.isBlank()) {
+            author = author.trim();
+
+            if (subscriptionRepository.existsByClientIdAndAuthor(
+                    client.getId(), author)) {
+                throw new UserAlreadySubscibedException("Author already subscribed");
+            }
+
+            subscriptionRepository.save(
+                    Subscription.builder()
+                            .client(client)
+                            .author(author)
+                            .build()
+            );
         }
 
-        clientRepository.save(client);
+        if (category != null && !category.isBlank()) {
+            category = category.trim();
+
+            if (subscriptionRepository.existsByClientIdAndCategory(
+                    client.getId(), category)) {
+                throw new UserAlreadySubscibedException("Category already subscribed");
+            }
+
+            subscriptionRepository.save(
+                    Subscription.builder()
+                            .client(client)
+                            .category(category)
+                            .build()
+            );
+        }
     }
 
+    @Transactional
     public void removeSubscription(SubscriptionDTO dto) {
 
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
 
         Client client = clientRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+                .orElseThrow(() -> new UserNotFoundException("Client not found"));
 
-        if (client.getSubscription() == null) {
-            return;
+        isActivated(client);
+
+        String author = dto.getAuthor();
+        String category = dto.getCategory();
+
+        if ((author == null || author.isBlank()) &&
+                (category == null || category.isBlank())) {
+            throw new IllegalArgumentException(
+                    "Author or category must be provided");
         }
 
-        if (dto.getAuthor() != null) {
-            client.getSubscription().getSubscribedAuthors()
-                    .remove(dto.getAuthor());
+        if (author != null && !author.isBlank()) {
+            subscriptionRepository.deleteByClientIdAndAuthor(
+                    client.getId(), author.trim());
         }
 
-        if (dto.getCategory() != null) {
-            client.getSubscription().getSubscribedCategories()
-                    .remove(dto.getCategory());
+        if (category != null && !category.isBlank()) {
+            subscriptionRepository.deleteByClientIdAndCategory(
+                    client.getId(), category.trim());
         }
+    }
 
-        clientRepository.save(client);
+    public void isActivated(Client client) {
+        if (!client.getActivated()) {
+            throw new UserNotActivatedException("User adress was not confirmed!");
+        }
     }
 }

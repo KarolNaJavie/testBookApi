@@ -1,43 +1,82 @@
 package com.example.library.controllers;
 
+import com.example.library.config.CustomUserDetailsService;
+import com.example.library.config.SecurityConfig;
 import com.example.library.model.BookDTO;
 import com.example.library.services.BookService;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import tools.jackson.databind.ObjectMapper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@ExtendWith(MockitoExtension.class)
-public class BookControllerTest {
+@Import(SecurityConfig.class)
+@WebMvcTest(BookController.class)
+class BookControllerTest {
 
-    @Mock
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private CustomUserDetailsService customUserDetailsService;
+
+    @MockitoBean
     private BookService bookService;
 
-    @InjectMocks
-    private BookController bookController;
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void shouldAddBookWhenAdmin() throws Exception {
+
+        BookDTO bookDTO = new BookDTO();
+
+        when(bookService.addBook(any(BookDTO.class)))
+                .thenReturn(bookDTO);
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/book/add")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(bookDTO)))
+                .andExpect(status().isOk());
+
+        verify(bookService, times(1))
+                .addBook(any(BookDTO.class));
+    }
 
     @Test
-    void testAddBook() {
+    @WithMockUser(roles = "USER")
+    void shouldReturnForbiddenWhenUser() throws Exception {
 
-        BookDTO bookDTO = BookDTO.builder()
-                .title("Mroczna Wieża")
-                .author("Stephen King")
-                .category("Fantasy")
-                .build();
+        BookDTO bookDTO = new BookDTO();
 
-        when(bookService.addBook(bookDTO)).thenReturn(bookDTO);
+        mockMvc.perform(MockMvcRequestBuilders.post("/book/add")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(bookDTO)))
+                .andExpect(status().isForbidden());
 
-        BookDTO result = bookController.addBook(bookDTO);
+        verifyNoInteractions(bookService);
+    }
 
-        assertEquals("Mroczna Wieża", result.getTitle());
-        assertEquals("Stephen King", result.getAuthor());
-        assertEquals("Fantasy", result.getCategory());
+    @Test
+    void shouldReturnUnauthorizedWhenNotAuthenticated() throws Exception {
 
-        verify(bookService).addBook(bookDTO);
+        BookDTO bookDTO = new BookDTO();
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/book/add")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(bookDTO)))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(bookService);
     }
 }

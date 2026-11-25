@@ -1,66 +1,85 @@
 package com.example.library.controllers;
 
+import com.example.library.config.CustomUserDetailsService;
+import com.example.library.config.SecurityConfig;
 import com.example.library.model.ClientDTO;
 import com.example.library.model.SubscriptionDTO;
 import com.example.library.services.ClientService;
+
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
-public class ClientControllerTest {
+@WebMvcTest(ClientController.class)
+@Import(SecurityConfig.class)
+class ClientControllerTest {
 
-    @Mock
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
     private ClientService clientService;
 
-    @InjectMocks
-    private ClientController clientController;
+    @MockitoBean
+    private CustomUserDetailsService customUserDetailsService;
 
     @Test
-    void testRegister() {
-        ClientDTO clientDTO = ClientDTO.builder()
-                .name("Jan")
-                .surname("Kowalski")
-                .email("test@gmail.com")
-                .password("password123")
-                .build();
+    @WithMockUser(roles = "USER")
+    void shouldRegisterClient() throws Exception {
 
-        when(clientService.register(clientDTO)).thenReturn(clientDTO);
+        mockMvc.perform(post("/user/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
 
-        ClientDTO result = clientController.register(clientDTO);
-
-        assertEquals("Jan", result.getName());
-        assertEquals("Kowalski", result.getSurname());
-        assertEquals("test@gmail.com", result.getEmail());
-
-        verify(clientService).register(clientDTO);
+        verify(clientService).register(any(ClientDTO.class));
     }
 
     @Test
-    void testAddSubscription() {
-        SubscriptionDTO dto = SubscriptionDTO.builder()
-                .author("Stephen King")
-                .build();
+    @WithMockUser(roles = "USER")
+    void shouldActivateClient() throws Exception {
 
-        clientController.addSubscription(dto);
+        mockMvc.perform(get("/user/activate/1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(
+                        "Account activated successfully!"));
 
-        verify(clientService).addSubscription(dto);
+        verify(clientService).activateClient(1L);
     }
 
     @Test
-    void testRemoveSubscription() {
-        SubscriptionDTO dto = SubscriptionDTO.builder()
-                .author("Stephen King")
-                .build();
+    @WithMockUser(roles = "USER")
+    void shouldAddSubscription() throws Exception {
 
-        clientController.removeSubscription(dto);
+        mockMvc.perform(post("/user/subscription")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
 
-        verify(clientService).removeSubscription(dto);
+        verify(clientService).addSubscription(
+                any(SubscriptionDTO.class));
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void shouldRemoveSubscription() throws Exception {
+
+        mockMvc.perform(delete("/user/subscription")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        verify(clientService).removeSubscription(
+                any(SubscriptionDTO.class));
     }
 }

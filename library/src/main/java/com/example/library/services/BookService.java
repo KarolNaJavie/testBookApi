@@ -1,10 +1,10 @@
 package com.example.library.services;
 
-import com.example.library.model.Book;
-import com.example.library.model.BookDTO;
-import com.example.library.model.Client;
+import com.example.library.model.*;
 import com.example.library.repository.BookRepository;
 import com.example.library.repository.ClientRepository;
+import com.example.library.repository.NotificationRepository;
+import com.example.library.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +17,9 @@ public class BookService {
     private final BookRepository bookRepository;
     private final ClientRepository clientRepository;
     private final MailService mailService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final NotificationRepository notificationRepository;
+
 
     public BookDTO addBook(BookDTO bookDTO) {
 
@@ -25,24 +28,29 @@ public class BookService {
                 .title(bookDTO.getTitle())
                 .category(bookDTO.getCategory())
                 .build();
+
         Book added = bookRepository.save(book);
 
-        List<Client> subscribers = clientRepository.findAll().stream()
-                .filter(client -> client.getSubscription() != null)
-                .filter(client ->
-                        (client.getSubscription().getSubscribedAuthors() != null &&
-                                client.getSubscription().getSubscribedAuthors()
-                                        .contains(book.getAuthor()))
-                                ||
-                                (client.getSubscription().getSubscribedCategories() != null &&
-                                        client.getSubscription().getSubscribedCategories()
-                                                .contains(book.getCategory()))
-                )
-                .toList();
-        String text = "Zostala dodana ksiazka ktora moze cie zainteresowac: " + book.getTitle() + " z gatunku: " + book.getCategory();
-        subscribers.forEach(client ->
-                mailService.sendConfirmation(client.getEmail(), text)
-        );
+        List<Subscription> subscriptions =
+                subscriptionRepository.findMatchingSubscriptions(
+                        book.getAuthor(),
+                        book.getCategory()
+                );
+
+        subscriptions.stream()
+                .map(Subscription::getClient)
+                .distinct()
+                .forEach(client -> {
+                    Notification notification = Notification.builder()
+                            .client(client)
+                            .book(added)
+                            .build();
+
+                    if (!notificationRepository.existsByClientIdAndBookId(
+                            client.getId(), added.getId())) {
+                        notificationRepository.save(notification);
+                    }
+                });
 
         return BookDTO.builder()
                 .title(added.getTitle())
@@ -51,3 +59,7 @@ public class BookService {
                 .build();
     }
 }
+
+
+
+

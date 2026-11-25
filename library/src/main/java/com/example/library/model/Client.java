@@ -18,11 +18,9 @@ public class Client {
     private Long id;
     private String name;
     private String surname;
+    private Boolean activated;
 
     @Column(unique = true, nullable = false)
     private String email;
     private String password;
-
-    @Embedded
-    private Subscription subscription;
 }

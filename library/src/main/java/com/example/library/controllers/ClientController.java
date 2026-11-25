@@ -4,7 +4,7 @@ import com.example.library.model.ClientDTO;
 import com.example.library.model.SubscriptionDTO;
 import com.example.library.services.ClientService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,6 +17,13 @@ public class ClientController {
     @PostMapping("/register")
     public ClientDTO register(@RequestBody ClientDTO clientDTO) {
         return clientService.register(clientDTO);
+    }
+
+    @GetMapping("/activate/{userId}")
+    public ResponseEntity<String> activateClient(@PathVariable Long userId) {
+        clientService.activateClient(userId);
+
+        return ResponseEntity.ok("Account activated successfully!");
     }
 
     @PostMapping("/subscription")

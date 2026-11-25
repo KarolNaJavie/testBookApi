@@ -29,6 +29,7 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/user/register").permitAll()
+                        .requestMatchers("/user/activate/**").permitAll()
                         .requestMatchers("/user/subscription").authenticated()
                         .anyRequest().authenticated()
                 )
